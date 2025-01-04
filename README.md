@@ -43,17 +43,17 @@ pip install requests
 1. 克隆本仓库：
 
 ```bash
-git clone https://github.com/your-username/deepseek-chat-gui.git
+git clone https://github.com/bujinyun/AI_Chat_Gui.git
 cd deepseek-chat-gui
 ```
 
 2. 修改 `API_KEY`：
-   - 打开 `deepseek_chat_gui.py` 文件，将 `API_KEY` 替换为你的 DeepSeek API 密钥。
+   - 打开 `deepseek.py` 文件，将 `API_KEY` 替换为你的 DeepSeek API 密钥。
 
 3. 运行程序：
 
 ```bash
-python deepseek_chat_gui.py
+python deepseek.py
 ```
 
 ## 使用说明
@@ -77,7 +77,7 @@ python deepseek_chat_gui.py
 
 ```
 deepseek-chat-gui/
-├── deepseek_chat_gui.py       # 主程序文件
+├── deepseek.py       # 主程序文件
 ├── prompts/                   # Prompts 存储目录
 ├── README.md                  # 项目说明文件
 ```

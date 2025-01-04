@@ -102,15 +102,13 @@ AI_Chat_Gui/
 
 ### 主界面
 
-![主界面](screenshots/main_window.png)
+![image-20250104143059218](C:\Users\57368\AppData\Roaming\Typora\typora-user-images\image-20250104143059218.png)
 
 ### Prompts 管理界面
 
-![Prompts 管理界面](screenshots/prompts_manager.png)
+![image-20250104143219050](C:\Users\57368\AppData\Roaming\Typora\typora-user-images\image-20250104143219050.png)
 
-### 弹出窗口
 
-![弹出窗口](screenshots/popup_window.png)
 
 ---
 

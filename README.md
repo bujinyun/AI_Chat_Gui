@@ -44,7 +44,7 @@ pip install requests
 
 ```bash
 git clone https://github.com/bujinyun/AI_Chat_Gui.git
-cd deepseek-chat-gui
+cd AI_Chat_Gui
 ```
 
 2. 修改 `API_KEY`：
@@ -76,7 +76,7 @@ python deepseek.py
 ## 项目结构
 
 ```
-deepseek-chat-gui/
+AI_Chat_Gui/
 ├── deepseek.py       # 主程序文件
 ├── prompts/                   # Prompts 存储目录
 ├── README.md                  # 项目说明文件

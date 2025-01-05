@@ -10,7 +10,7 @@ import webbrowser
 # 默认配置
 DEFAULT_CONFIG = {
     "API_URL": "https://api.deepseek.com/chat/completions",
-    "API_KEY": "sk-youapi",
+    "API_KEY": "your_api_key",
     "max_history_length": 36,
     "max_tokens": 8000
 }
@@ -63,7 +63,7 @@ class DeepSeekChatApp:
         # 参数设置
         self.temperature = 1.0  # 默认温度参数
         self.conversation_history = []  # 初始化对话历史
-        self.system_prompt = ""  # 系统提示词
+        self.system_prompt = ""  # 默认系统提示词
 
         # 模型选择
         self.models = ["deepseek-chat"]  # 可用的模型列表
@@ -72,7 +72,7 @@ class DeepSeekChatApp:
         # 创建控制面板
         self.control_frame = tk.Frame(root)
         self.control_frame.pack(padx=10, pady=5, fill=tk.X)
-        
+
         # 添加模型选择下拉菜单
         tk.Label(self.control_frame, text="选择模型:").pack(side=tk.LEFT)
         self.model_menu = tk.OptionMenu(self.control_frame, self.selected_model, *self.models)
@@ -99,43 +99,47 @@ class DeepSeekChatApp:
         self.settings_button = tk.Button(self.control_frame, text="设置", command=self.open_settings)
         self.settings_button.pack(side=tk.RIGHT, padx=(10, 0))
 
+        # 添加系统提示词按钮
+        self.system_prompt_button = tk.Button(self.control_frame, text="系统提示词", command=self.open_system_prompt_editor)
+        self.system_prompt_button.pack(side=tk.RIGHT, padx=(10, 0))
+
         # 创建聊天显示区域
         self.chat_display = scrolledtext.ScrolledText(root, wrap=tk.WORD, state='disabled')
         self.chat_display.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-        
+
         # 创建输入框和发送按钮
         self.input_frame = tk.Frame(root)
         self.input_frame.pack(padx=10, pady=10, fill=tk.X)
-        
+
         # 使用Text控件代替Entry，并添加滚动条
         self.user_input = tk.Text(self.input_frame, height=5, wrap=tk.WORD)
         self.user_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
         # 添加垂直滚动条
         scrollbar = tk.Scrollbar(self.input_frame, command=self.user_input.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.user_input.config(yscrollcommand=scrollbar.set)
-        
+
         # 创建按钮容器
         self.button_frame = tk.Frame(self.input_frame)
         self.button_frame.pack(side=tk.RIGHT, padx=(10, 0), fill=tk.Y)
-        
+
         # 发送按钮（变大）
         self.send_button = tk.Button(self.button_frame, text="发送", command=self.send_message, width=10, height=2)
         self.send_button.pack(side=tk.BOTTOM, pady=(0, 5))
-        
+
         # 清空历史按钮
         self.clear_history_button = tk.Button(self.button_frame, text="清空历史", command=self.clear_history, width=10)
         self.clear_history_button.pack(side=tk.TOP, pady=(0, 5))
-        
+
         # 保存历史按钮
         self.save_history_button = tk.Button(self.button_frame, text="保存历史", command=self.save_history_as_md, width=10)
         self.save_history_button.pack(side=tk.TOP)
-        
+
         # 添加加载指示器
         self.loading_label = tk.Label(root, text="", fg="blue")
         self.loading_label.pack()
-        
+
         # 绑定回车键发送消息（注意：现在需要处理多行输入）
         self.root.bind('<Return>', self.handle_enter_key)
 
@@ -180,8 +184,7 @@ class DeepSeekChatApp:
         self.chat_display.config(state='normal')  # 启用编辑
         self.chat_display.insert(tk.END, f"{sender}: {message}\n\n")
         self.chat_display.config(state='disabled')  # 禁用编辑
-        self.chat_display.yview(tk.END)  # 自动滚动到底部
-        
+        self.chat_display.yview(tk.END)  # 自动滚动到底部        
         # 如果是AI的回复，显示在弹出窗口
         if sender == "DeepSeek":
             self.show_popup(message)
@@ -235,7 +238,7 @@ class DeepSeekChatApp:
         # 否则发送消息
         self.send_message()
         return 'break'  # 阻止默认行为
-        
+
     def clear_history(self):
         """清空对话历史"""
         self.conversation_history = []
@@ -243,41 +246,50 @@ class DeepSeekChatApp:
         self.chat_display.delete("1.0", tk.END)  # 清空聊天框
         self.chat_display.config(state='disabled')  # 禁用编辑
         self.display_message("系统", "对话历史已清空")
-        
+
     def send_message(self):
         # 获取用户输入并限制最大长度
         user_message = self.user_input.get("1.0", tk.END).strip()
         if user_message == "":
             return
-            
+
         # 限制消息长度（例如8000字符）
         if len(user_message) > 80000:
             self.display_message("系统", "消息过长,请缩短至80000字符以内")
             return
-            
+
         # 显示用户消息
         self.display_message("你", user_message)
         self.user_input.delete("1.0", tk.END)  # 清空输入框
-        
+
         # 启动一个新线程来处理API请求
         threading.Thread(target=self.get_deepseek_response_thread, args=(user_message,)).start()
-        
+
     def get_deepseek_response_thread(self, user_message):
         """在新线程中调用DeepSeek API获取回复"""
         # 显示加载指示器
         self.show_loading("正在处理请求，请稍候...")
-        
+
         # 如果历史为空，添加系统提示
         if not self.conversation_history:
             self.conversation_history.append({"role": "system", "content": self.system_prompt})
-            
+
         # 添加用户消息
         self.conversation_history.append({"role": "user", "content": user_message})
-        
+
         # 限制历史长度
         if len(self.conversation_history) > self.max_history_length * 2:
-            self.conversation_history = self.conversation_history[-self.max_history_length * 2:]
-        
+            # 检查是否包含 system 消息
+            system_messages = [msg for msg in self.conversation_history if msg["role"] == "system"]
+            if system_messages:
+                # 保留第一条 system 消息
+                system_message = system_messages[0]
+                self.conversation_history = [system_message] + self.conversation_history[-self.max_history_length * 2 + 1:]
+            else:
+                # 如果没有 system 消息，删除历史后重新添加 system_prompt
+                self.conversation_history = self.conversation_history[-self.max_history_length * 2:]
+                self.conversation_history.insert(0, {"role": "system", "content": self.system_prompt})
+
         headers = {
             "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json"
@@ -288,11 +300,12 @@ class DeepSeekChatApp:
             "temperature": self.temperature_options[self.selected_temperature.get()],  # 使用选择的温度值
             "max_tokens": self.max_tokens
         }
-        
+
+
         # 重试机制
         max_retries = 3
         retry_delay = 30  # 重试间隔时间（秒）
-        
+
         # 启动计时器
         start_time = time.time()
 
@@ -324,7 +337,7 @@ class DeepSeekChatApp:
                 # 如果API调用失败，移除最后一条用户消息
                 self.conversation_history.pop()
                 self.hide_loading()
-                self.root.after(0, self.display_message, "系统", f"网络连接出现问题，请稍后重试。错误信息：{str(e)}")
+                self.root.after(0, self.display_message, "系统", f"网络连接出现问题，检查api后重试。错误信息：{str(e)}")
                 return
             except (KeyError, ValueError) as e:
                 self.conversation_history.pop()
@@ -346,7 +359,7 @@ class DeepSeekChatApp:
 
         # 添加访问官网按钮
         def open_website():
-            webbrowser.open("https://www.deepseek.com/")
+            webbrowser.open("https://status.deepseek.com/")
 
         tk.Button(popup, text="访问官网", command=open_website).pack(pady=10)
 
@@ -480,7 +493,7 @@ class DeepSeekChatApp:
         button_frame.grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
         # 添加选择按钮
-        select_button = tk.Button(button_frame, text="选择", command=self.select_prompt, width=10)
+        select_button = tk.Button(button_frame, text="使用", command=self.select_prompt, width=10)
         select_button.pack(side=tk.LEFT, padx=5)
 
         # 添加保存按钮
@@ -488,17 +501,37 @@ class DeepSeekChatApp:
         save_button.pack(side=tk.RIGHT, padx=5)
 
         # 添加打开 Prompts 按钮
-        open_prompt_button = tk.Button(button_frame, text="打开 Prompts", command=self.open_selected_prompt, width=10)
+        open_prompt_button = tk.Button(button_frame, text="预览Prompts", command=self.open_selected_prompt, width=10)
         open_prompt_button.pack(side=tk.LEFT, padx=5)
+
+        # 添加复制到系统提示词按钮
+        copy_to_system_prompt_button = tk.Button(button_frame, text="复制到系统提示词", command=self.copy_to_system_prompt, width=15)
+        copy_to_system_prompt_button.pack(side=tk.LEFT, padx=5)
 
         # 添加删除按钮
         delete_button = tk.Button(button_frame, text="删除", command=self.delete_selected_prompt, width=10)
-        delete_button.pack(side=tk.LEFT, padx=5)
+        delete_button.pack(side=tk.RIGHT, padx=5)
 
         # 配置 Treeview 和输入框的权重
         self.prompts_manager.grid_rowconfigure(1, weight=1)  # Treeview 占据更多空间
         self.prompts_manager.grid_rowconfigure(3, weight=1)  # 内容输入框占据更多空间
         self.prompts_manager.grid_columnconfigure(1, weight=1)  # 输入框和 Treeview 的列占据更多空间
+
+    def copy_to_system_prompt(self):
+        """将选定的 Prompts 复制到系统提示词窗口"""
+        selected_item = self.tree.selection()
+        if selected_item:
+            prompt_name = self.tree.item(selected_item, "values")[0]
+            for prompt in self.prompts:
+                if prompt[0] == prompt_name:
+                    # 打开系统提示词窗口
+                    self.open_system_prompt_editor()
+                    # 将 Prompts 内容复制到系统提示词窗口
+                    self.system_prompt_text.delete("1.0", tk.END)
+                    self.system_prompt_text.insert(tk.END, prompt[1]["content"])
+                    break
+        else:
+            messagebox.showwarning("警告", "请先选择一个 Prompts")
 
     def filter_prompts(self, event=None):
         """根据搜索框内容筛选 Prompts"""
@@ -573,14 +606,14 @@ class DeepSeekChatApp:
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
                     json.dump(prompt_data, file, ensure_ascii=False, indent=4)
-                
+
                 # 更新 Prompts 列表
                 self.prompts = [(name, data) for name, data in self.prompts if name != prompt_name]  # 移除旧记录
                 self.prompts.append((prompt_name, prompt_data))
-                
+
                 # 更新 Treeview
                 self.update_treeview()
-                
+
                 # 清空输入框
                 self.new_prompt_input.delete("1.0", tk.END)
                 self.prompt_name_entry.delete(0, tk.END)  # 清空名称输入框
@@ -617,6 +650,43 @@ class DeepSeekChatApp:
                     messagebox.showerror("错误", f"删除 Prompt 失败: {str(e)}")
         else:
             messagebox.showwarning("警告", "请先选择一个 Prompts")
+
+    def open_system_prompt_editor(self):
+        """打开系统提示词编辑窗口"""
+        self.system_prompt_window = tk.Toplevel(self.root)
+        self.system_prompt_window.title("系统提示词")
+        self.system_prompt_window.geometry("600x400")
+
+        # 创建文本框
+        self.system_prompt_text = tk.Text(self.system_prompt_window, wrap=tk.WORD, height=10)
+        self.system_prompt_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        self.system_prompt_text.insert(tk.END, self.system_prompt)  # 显示当前系统提示词
+
+        # 创建保存按钮
+        save_button = tk.Button(self.system_prompt_window, text="保存", command=self.save_system_prompt)
+        save_button.pack(pady=10)
+
+    def save_system_prompt(self):
+        """保存系统提示词"""
+        new_system_prompt = self.system_prompt_text.get("1.0", tk.END).strip()
+        self.system_prompt = new_system_prompt
+
+        # 检查对话历史中是否包含 system 消息
+        system_message_index = -1
+        for i, message in enumerate(self.conversation_history):
+            if message["role"] == "system":
+                system_message_index = i
+                break
+
+        if system_message_index != -1:
+            # 如果存在 system 消息，更新其内容
+            self.conversation_history[system_message_index]["content"] = new_system_prompt
+        else:
+            # 如果不存在 system 消息，插入到对话历史的最前面
+            self.conversation_history.insert(0, {"role": "system", "content": new_system_prompt})
+
+        messagebox.showinfo("成功", "系统提示词已更新并立即生效")
+        self.system_prompt_window.destroy()
 
 
 if __name__ == "__main__":

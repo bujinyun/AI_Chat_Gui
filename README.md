@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![GUI](https://img.shields.io/badge/GUI-Tkinter-orange)
 
-**DeepSeek Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、对话管理、Prompt 管理等功能。
+**DeepSeek Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、对话管理、系统提示词管理、Prompt 管理等功能。
 
 ## 功能特性
 
@@ -22,7 +22,9 @@
 - **API 配置**：
   - 支持自定义 DeepSeek API 密钥和模型选择。
   - 提供温度参数调节，适用于不同场景（如代码生成、创意写作等）。
-
+  - 更改max_token参数，调整最大输出
+  - 更改最大上下文历史的对话数，同时还保留系统提示词
+  
 - **用户界面**：
   - 使用 Tkinter 构建，界面简洁易用。
   - 支持弹出窗口显示最新回复，并提供复制和保存功能。
@@ -96,19 +98,5 @@ AI_Chat_Gui/
 
 本项目采用 [MIT 许可证](LICENSE)。
 
----
 
-## 截图
-
-### 主界面
-
-![image-20250104143059218](C:\Users\57368\AppData\Roaming\Typora\typora-user-images\image-20250104143059218.png)
-
-### Prompts 管理界面
-
-![image-20250104143219050](C:\Users\57368\AppData\Roaming\Typora\typora-user-images\image-20250104143219050.png)
-
-
-
----
 

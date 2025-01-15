@@ -6,14 +6,19 @@ import threading
 import json
 import os
 import webbrowser
+from prompts_manager.prompts_manager import PromptsManager
+from prompts_manager.system_prompt_manager import SystemPromptManager
 
-# 默认配置
+
+
+# 默认配置,实测max_tokens=8000好于8192
 DEFAULT_CONFIG = {
     "API_URL": "https://api.deepseek.com/chat/completions",
-    "API_KEY": "your_api_key",
-    "max_history_length": 36,
-    "max_tokens": 8000
+    "API_KEY": "you_api_key",
+    "max_history_length": 100,
+    "max_tokens": 8000 
 }
+
 
 # 配置文件路径
 CONFIG_FILE = "config.json"
@@ -61,7 +66,7 @@ class DeepSeekChatApp:
         self.max_tokens = config.get("max_tokens", DEFAULT_CONFIG["max_tokens"])
 
         # 参数设置
-        self.temperature = 1.0  # 默认温度参数
+        self.temperature = 1.5  # 默认温度参数
         self.conversation_history = []  # 初始化对话历史
         self.system_prompt = ""  # 默认系统提示词
 
@@ -99,6 +104,13 @@ class DeepSeekChatApp:
         self.settings_button = tk.Button(self.control_frame, text="设置", command=self.open_settings)
         self.settings_button.pack(side=tk.RIGHT, padx=(10, 0))
 
+        # 添加历史对话按钮
+        self.history_dir = "history"
+        if not os.path.exists(self.history_dir):
+            os.makedirs(self.history_dir)
+        self.history_button = tk.Button(self.control_frame, text="加载历史", command=self.show_history_window)
+        self.history_button.pack(side=tk.RIGHT, padx=(10, 0))
+
         # 添加系统提示词按钮
         self.system_prompt_button = tk.Button(self.control_frame, text="系统提示词", command=self.open_system_prompt_editor)
         self.system_prompt_button.pack(side=tk.RIGHT, padx=(10, 0))
@@ -133,7 +145,7 @@ class DeepSeekChatApp:
         self.clear_history_button.pack(side=tk.TOP, pady=(0, 5))
 
         # 保存历史按钮
-        self.save_history_button = tk.Button(self.button_frame, text="保存历史", command=self.save_history_as_md, width=10)
+        self.save_history_button = tk.Button(self.button_frame, text="保存历史", command=self.save_history, width=10)
         self.save_history_button.pack(side=tk.TOP)
 
         # 添加加载指示器
@@ -143,31 +155,203 @@ class DeepSeekChatApp:
         # 绑定回车键发送消息（注意：现在需要处理多行输入）
         self.root.bind('<Return>', self.handle_enter_key)
 
-        # 自动加载本地 Prompts
-        self.load_local_prompts()
+        # 初始化系统提示词输入框
+        self.system_prompt_text = None
+        
+        # 初始化 PromptsManager 和 SystemPromptManager
+        self.prompts_manager = PromptsManager(root, main_app=self, main_input=self.user_input)
+        self.system_prompt_manager = SystemPromptManager(root, self.prompts_manager, main_app=self)
 
-    def save_history_as_md(self):
-        """将当前历史对话保存为 .md 文件"""
+    def save_history(self):
+        """保存历史对话"""
         if not self.conversation_history:
             messagebox.showwarning("警告", "当前没有历史对话可保存")
             return
 
-        # 生成 Markdown 格式的对话内容
-        md_content = "# 历史对话记录\n\n"
-        for message in self.conversation_history:
-            role = message["role"]
-            content = message["content"]
-            md_content += f"**{role.capitalize()}**: {content}\n\n"
-
         # 弹出文件保存对话框
-        file_path = filedialog.asksaveasfilename(defaultextension=".md", filetypes=[("Markdown文件", "*.md")])
-        if file_path:
-            try:
+        file_types = [("JSON文件", "*.json"), ("Markdown文件", "*.md")]
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=file_types,
+            initialdir="history",
+            title="保存历史对话"
+        )
+        
+        if not file_path:  # 用户取消保存
+            return
+
+        try:
+            if file_path.endswith(".json"):
                 with open(file_path, 'w', encoding='utf-8') as file:
+                    json.dump(self.conversation_history, file, ensure_ascii=False, indent=4)
+            elif file_path.endswith(".md"):
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    # 将对话历史转换为Markdown格式
+                    md_content = "# 对话历史\n\n"
+                    for msg in self.conversation_history:
+                        role = msg["role"].capitalize()
+                        content = msg["content"]
+                        md_content += f"## {role}\n\n{content}\n\n"
                     file.write(md_content)
-                messagebox.showinfo("成功", f"历史对话已保存为 {file_path}")
-            except Exception as e:
-                messagebox.showerror("错误", f"保存文件时出错: {str(e)}")
+            
+            messagebox.showinfo("成功", f"历史对话已保存为 {file_path}")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存文件时出错: {str(e)}")
+
+    def show_history_window(self):
+        """显示历史对话窗口"""
+        self.history_window = tk.Toplevel()
+        self.history_window.title("历史对话")
+        self.history_window.geometry("800x600")
+
+        # 创建主容器
+        main_frame = tk.Frame(self.history_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # 创建文件列表
+        self.file_listbox = tk.Listbox(main_frame, selectmode=tk.SINGLE)
+        self.file_listbox.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+
+        # 添加滚动条
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.file_listbox.yview)
+        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+        self.file_listbox.config(yscrollcommand=scrollbar.set)
+
+        # 创建预览区域
+        preview_frame = tk.Frame(main_frame)
+        preview_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # 添加预览标题
+        tk.Label(preview_frame, text="对话预览", font=("Arial", 12, "bold")).pack(pady=(0, 10))
+
+        # 添加预览文本框
+        self.preview_text = tk.Text(preview_frame, wrap=tk.WORD, state=tk.DISABLED)
+        self.preview_text.pack(fill=tk.BOTH, expand=True)
+
+        # 添加按钮容器
+        button_frame = tk.Frame(self.history_window)
+        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+        # 添加加载按钮
+        load_button = tk.Button(button_frame, text="加载", command=self.load_selected_history)
+        load_button.pack(side=tk.LEFT, padx=5)
+
+        # 添加删除按钮
+        delete_button = tk.Button(button_frame, text="删除", command=self.delete_selected_history)
+        delete_button.pack(side=tk.LEFT, padx=5)
+
+        # 添加关闭按钮
+        close_button = tk.Button(button_frame, text="关闭", command=self.history_window.destroy)
+        close_button.pack(side=tk.RIGHT)
+
+        # 加载历史文件列表
+        self.load_history_files()
+
+        # 绑定选择事件
+        self.file_listbox.bind("<<ListboxSelect>>", self.show_preview)
+
+    def load_history_files(self):
+        """加载历史文件列表"""
+        self.file_listbox.delete(0, tk.END)
+        try:
+            files = [f for f in os.listdir(self.history_dir) if f.endswith(".json")]
+            for file in sorted(files, reverse=True):
+                self.file_listbox.insert(tk.END, file)
+        except Exception as e:
+            messagebox.showerror("错误", f"无法加载历史文件: {str(e)}")
+
+    def show_preview(self, event):
+        """显示选中文件的预览"""
+        selection = self.file_listbox.curselection()
+        if not selection:
+            return
+
+        selected_file = self.file_listbox.get(selection[0])
+        file_path = os.path.join(self.history_dir, selected_file)
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                history = json.load(f)
+                preview_text = ""
+                for msg in history[-10:]:  # 显示最后10条消息
+                    role = msg["role"]
+                    content = msg["content"]
+                    preview_text += f"{role.capitalize()}: {content[:100]}...\n\n"
+
+                self.preview_text.config(state=tk.NORMAL)
+                self.preview_text.delete(1.0, tk.END)
+                self.preview_text.insert(tk.END, preview_text)
+                self.preview_text.config(state=tk.DISABLED)
+        except Exception as e:
+            self.preview_text.config(state=tk.NORMAL)
+            self.preview_text.delete(1.0, tk.END)
+            self.preview_text.insert(tk.END, f"无法加载预览: {str(e)}")
+            self.preview_text.config(state=tk.DISABLED)
+
+    def load_selected_history(self):
+        """加载选中的历史对话"""
+        selection = self.file_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("警告", "请先选择一个历史文件")
+            return
+
+        selected_file = self.file_listbox.get(selection[0])
+        file_path = os.path.join(self.history_dir, selected_file)
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                history = json.load(f)
+                self.history_window.destroy()
+                self.conversation_history = history
+                
+                # 更新系统提示词
+                system_messages = [msg for msg in history if msg["role"] == "system"]
+                if system_messages:
+                    self.system_prompt = system_messages[0]["content"]
+                    # 更新系统提示词管理器
+                    if self.system_prompt_manager:
+                        self.system_prompt_manager.system_prompt = self.system_prompt
+                        # 如果系统提示词窗口已打开，则更新显示
+                        if (hasattr(self.system_prompt_manager, 'system_prompt_window') and
+                            self.system_prompt_manager.system_prompt_window and
+                            self.system_prompt_manager.system_prompt_window.winfo_exists()):
+                            self.system_prompt_manager.update_system_prompt_display()
+                
+                # 更新聊天显示
+                self.chat_display.config(state=tk.NORMAL)
+                self.chat_display.delete("1.0", tk.END)
+                # 过滤掉system消息显示
+                for msg in history:
+                    if msg["role"] != "system":
+                        self.display_message(msg["role"].capitalize(), msg["content"])
+                
+                messagebox.showinfo("成功", "历史对话已加载（系统提示词已加载）")
+        except json.JSONDecodeError as e:
+            messagebox.showerror("错误", f"文件格式错误: {str(e)}")
+        except FileNotFoundError:
+            messagebox.showerror("错误", "文件不存在，可能已被删除")
+        except Exception as e:
+            messagebox.showerror("错误", f"加载历史文件时出错: {str(e)}")
+
+    def delete_selected_history(self):
+        """删除选中的历史对话"""
+        selection = self.file_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("警告", "请先选择一个历史文件")
+            return
+
+        selected_file = self.file_listbox.get(selection[0])
+        file_path = os.path.join(self.history_dir, selected_file)
+
+        try:
+            os.remove(file_path)
+            self.load_history_files()
+            self.preview_text.config(state=tk.NORMAL)
+            self.preview_text.delete(1.0, tk.END)
+            self.preview_text.config(state=tk.DISABLED)
+            messagebox.showinfo("成功", "历史文件已删除")
+        except Exception as e:
+            messagebox.showerror("错误", f"无法删除文件: {str(e)}")
 
     def show_loading(self, message="加载中..."):
         """显示加载指示器"""
@@ -221,7 +405,9 @@ class DeepSeekChatApp:
 
     def save_as_md(self, text):
         """将文本保存为.md文件"""
-        file_path = filedialog.asksaveasfilename(defaultextension=".md", filetypes=[("Markdown文件", "*.md")])
+
+        file_path = filedialog.asksaveasfilename(defaultextension=".md", filetypes=[("Markdown文件", "*.md")],
+            initialdir="ai_answer")
         if file_path:
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
@@ -259,7 +445,7 @@ class DeepSeekChatApp:
             return
 
         # 显示用户消息
-        self.display_message("你", user_message)
+        self.display_message("User", user_message)
         self.user_input.delete("1.0", tk.END)  # 清空输入框
 
         # 启动一个新线程来处理API请求
@@ -301,7 +487,6 @@ class DeepSeekChatApp:
             "max_tokens": self.max_tokens
         }
 
-
         # 重试机制
         max_retries = 3
         retry_delay = 30  # 重试间隔时间（秒）
@@ -314,6 +499,13 @@ class DeepSeekChatApp:
                 # 移除超时限制
                 response = requests.post(API_URL, headers=headers, json=data, timeout=None)
                 response.raise_for_status()
+                
+                #检查传参
+                print("temperature:",data["temperature"])
+                print("max_tokens:",data["max_tokens"])
+                print("API 响应:", response.json()['usage']) 
+
+
 
                 ai_response = response.json()['choices'][0]['message']['content']
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -342,7 +534,7 @@ class DeepSeekChatApp:
             except (KeyError, ValueError) as e:
                 self.conversation_history.pop()
                 self.hide_loading()
-                self.root.after(0, self.display_message, "系统", f"解析API响应失败,请稍后重试。错误信息：{str(e)}")
+                self.root.after(0, self.display_message, "系统", f"解析API响应失败: {str(e)}")
                 return
         self.hide_loading()
         self.root.after(0, self.display_message, "系统", "请求失败，请稍后重试")
@@ -435,258 +627,13 @@ class DeepSeekChatApp:
         except ValueError:
             messagebox.showerror("错误", "请输入有效的数字（最大历史记录长度和最大 Token 数必须为整数）")
 
-    def load_local_prompts(self):
-        """自动加载本地 Prompts"""
-        self.prompts = []
-        for filename in os.listdir(PROMPTS_DIR):
-            if filename.endswith(".json"):
-                file_path = os.path.join(PROMPTS_DIR, filename)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as file:
-                        prompt_data = json.load(file)
-                        self.prompts.append((filename, prompt_data))
-                except Exception as e:
-                    print(f"加载 {filename} 失败: {str(e)}")
-
     def open_prompts_manager(self):
         """打开 Prompts 管理界面"""
-        self.prompts_manager = tk.Toplevel(self.root)
-        self.prompts_manager.title("Prompts 管理")
-        self.prompts_manager.geometry("600x500")  # 增加窗口高度
-
-        # 使用 grid 布局
-        self.prompts_manager.grid_columnconfigure(0, weight=1)
-        self.prompts_manager.grid_rowconfigure(1, weight=1)
-
-        # 添加搜索框
-        search_frame = tk.Frame(self.prompts_manager)
-        search_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
-
-        tk.Label(search_frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 5))
-        self.search_entry = tk.Entry(search_frame, width=40)
-        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.search_entry.bind("<KeyRelease>", self.filter_prompts)  # 绑定键盘释放事件
-
-        # 创建 Treeview 显示 Prompts
-        self.tree = ttk.Treeview(self.prompts_manager, columns=("Name", "Content"), show="headings")
-        self.tree.heading("Name", text="名称")
-        self.tree.heading("Content", text="内容")
-        self.tree.column("Name", width=200)  # 设置名称列宽度为 200
-        self.tree.column("Content", width=400)  # 设置内容列宽度为 400
-        self.tree.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
-
-        # 填充 Treeview
-        self.update_treeview()
-
-        # 添加 Prompts 名称输入框
-        tk.Label(self.prompts_manager, text="Prompts 名称:").grid(row=2, column=0, padx=10, pady=(10, 0), sticky="w")
-        self.prompt_name_entry = tk.Entry(self.prompts_manager, width=40)  # 缩小输入框宽度
-        self.prompt_name_entry.grid(row=2, column=1, padx=10, pady=(10, 0), sticky="w")
-
-        # 添加 Prompts 内容输入框
-        tk.Label(self.prompts_manager, text="Prompts 内容:").grid(row=3, column=0, padx=10, pady=(10, 0), sticky="w")
-        self.new_prompt_input = tk.Text(self.prompts_manager, height=5, wrap=tk.WORD, width=40)  # 缩小输入框宽度
-        self.new_prompt_input.grid(row=3, column=1, padx=10, pady=(10, 0), sticky="nsew")
-
-        # 添加按钮容器
-        button_frame = tk.Frame(self.prompts_manager)
-        button_frame.grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
-
-        # 添加选择按钮
-        select_button = tk.Button(button_frame, text="使用", command=self.select_prompt, width=10)
-        select_button.pack(side=tk.LEFT, padx=5)
-
-        # 添加保存按钮
-        save_button = tk.Button(button_frame, text="保存", command=self.save_new_prompt, width=10)
-        save_button.pack(side=tk.RIGHT, padx=5)
-
-        # 添加打开 Prompts 按钮
-        open_prompt_button = tk.Button(button_frame, text="预览Prompts", command=self.open_selected_prompt, width=10)
-        open_prompt_button.pack(side=tk.LEFT, padx=5)
-
-        # 添加复制到系统提示词按钮
-        copy_to_system_prompt_button = tk.Button(button_frame, text="复制到系统提示词", command=self.copy_to_system_prompt, width=15)
-        copy_to_system_prompt_button.pack(side=tk.LEFT, padx=5)
-
-        # 添加删除按钮
-        delete_button = tk.Button(button_frame, text="删除", command=self.delete_selected_prompt, width=10)
-        delete_button.pack(side=tk.RIGHT, padx=5)
-
-        # 配置 Treeview 和输入框的权重
-        self.prompts_manager.grid_rowconfigure(1, weight=1)  # Treeview 占据更多空间
-        self.prompts_manager.grid_rowconfigure(3, weight=1)  # 内容输入框占据更多空间
-        self.prompts_manager.grid_columnconfigure(1, weight=1)  # 输入框和 Treeview 的列占据更多空间
-
-    def copy_to_system_prompt(self):
-        """将选定的 Prompts 复制到系统提示词窗口"""
-        selected_item = self.tree.selection()
-        if selected_item:
-            prompt_name = self.tree.item(selected_item, "values")[0]
-            for prompt in self.prompts:
-                if prompt[0] == prompt_name:
-                    # 打开系统提示词窗口
-                    self.open_system_prompt_editor()
-                    # 将 Prompts 内容复制到系统提示词窗口
-                    self.system_prompt_text.delete("1.0", tk.END)
-                    self.system_prompt_text.insert(tk.END, prompt[1]["content"])
-                    break
-        else:
-            messagebox.showwarning("警告", "请先选择一个 Prompts")
-
-    def filter_prompts(self, event=None):
-        """根据搜索框内容筛选 Prompts"""
-        search_term = self.search_entry.get().strip().lower()  # 获取搜索关键词并转换为小写
-        self.tree.delete(*self.tree.get_children())  # 清空 Treeview
-
-        # 遍历所有 Prompts，筛选出匹配的记录
-        for prompt in self.prompts:
-            prompt_name = prompt[0].lower()
-            prompt_content = prompt[1]["content"].lower()
-            if search_term in prompt_name or search_term in prompt_content:
-                self.tree.insert("", tk.END, values=(prompt[0], prompt[1]["content"][:50] + "..."))
-
-    def update_treeview(self):
-        """更新 Treeview 显示内容"""
-        self.tree.delete(*self.tree.get_children())  # 清空 Treeview
-        for prompt in self.prompts:
-            self.tree.insert("", tk.END, values=(prompt[0], prompt[1]["content"][:50] + "..."))
-
-    def open_selected_prompt(self):
-        """打开已加载的 Prompts 文件"""
-        selected_item = self.tree.selection()
-        if selected_item:
-            prompt_name = self.tree.item(selected_item, "values")[0]
-            for prompt in self.prompts:
-                if prompt[0] == prompt_name:
-                    # 将 Prompts 内容显示在输入框中
-                    self.new_prompt_input.delete("1.0", tk.END)  # 清空输入框
-                    self.new_prompt_input.insert(tk.END, prompt[1]["content"])
-                    self.prompt_name_entry.delete(0, tk.END)  # 清空名称输入框
-                    self.prompt_name_entry.insert(0, prompt_name.replace(".json", ""))  # 显示名称（去掉扩展名）
-                    break
-        else:
-            messagebox.showwarning("警告", "请先选择一个 Prompts")
-
-    def select_prompt(self):
-        """选择 Prompt 并粘贴到输入框"""
-        selected_item = self.tree.selection()
-        if selected_item:
-            prompt_name = self.tree.item(selected_item, "values")[0]
-            for prompt in self.prompts:
-                if prompt[0] == prompt_name:
-                    # 将 Prompt 内容插入到输入框中
-                    self.user_input.insert(tk.END, prompt[1]["content"])
-                    self.prompts_manager.destroy()  # 关闭 Prompts 管理界面
-                    break
-
-    def save_new_prompt(self):
-        """保存新的 Prompt"""
-        new_prompt_content = self.new_prompt_input.get("1.0", tk.END).strip()
-        if new_prompt_content:
-            # 获取用户输入的 Prompts 名称
-            prompt_name = self.prompt_name_entry.get().strip()
-            if not prompt_name:
-                # 如果用户未输入名称，使用默认名称
-                prompt_name = f"prompt_{len(self.prompts) + 1}.json"
-            else:
-                # 确保文件扩展名为 .json
-                if not prompt_name.endswith(".json"):
-                    prompt_name += ".json"
-
-            # 检查文件是否已存在
-            file_path = os.path.join(PROMPTS_DIR, prompt_name)
-            if os.path.exists(file_path):
-                # 如果文件已存在，弹出确认对话框
-                confirm = messagebox.askyesno("确认", f"文件 {prompt_name} 已存在，是否覆盖？")
-                if not confirm:
-                    return  # 用户选择不覆盖，直接返回
-
-            # 保存 Prompt
-            prompt_data = {"content": new_prompt_content}
-            try:
-                with open(file_path, 'w', encoding='utf-8') as file:
-                    json.dump(prompt_data, file, ensure_ascii=False, indent=4)
-
-                # 更新 Prompts 列表
-                self.prompts = [(name, data) for name, data in self.prompts if name != prompt_name]  # 移除旧记录
-                self.prompts.append((prompt_name, prompt_data))
-
-                # 更新 Treeview
-                self.update_treeview()
-
-                # 清空输入框
-                self.new_prompt_input.delete("1.0", tk.END)
-                self.prompt_name_entry.delete(0, tk.END)  # 清空名称输入框
-                messagebox.showinfo("成功", "Prompt 已保存")
-            except Exception as e:
-                messagebox.showerror("错误", f"保存 Prompt 失败: {str(e)}")
-        else:
-            messagebox.showwarning("警告", "请输入 Prompt 内容")
-
-    def delete_selected_prompt(self):
-        """删除所选的 Prompt 记录"""
-        selected_item = self.tree.selection()
-        if selected_item:
-            # 获取选中的 Prompt 名称
-            prompt_name = self.tree.item(selected_item, "values")[0]
-
-            # 弹出二次确认对话框
-            confirm = messagebox.askyesno("确认", f"确定要删除 {prompt_name} 吗？")
-            if confirm:
-                try:
-                    # 删除文件
-                    file_path = os.path.join(PROMPTS_DIR, prompt_name)
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-
-                    # 从 Prompts 列表中移除
-                    self.prompts = [prompt for prompt in self.prompts if prompt[0] != prompt_name]
-
-                    # 更新 Treeview
-                    self.update_treeview()
-
-                    messagebox.showinfo("成功", f"Prompt {prompt_name} 已删除")
-                except Exception as e:
-                    messagebox.showerror("错误", f"删除 Prompt 失败: {str(e)}")
-        else:
-            messagebox.showwarning("警告", "请先选择一个 Prompts")
+        self.prompts_manager.open_prompts_manager()
 
     def open_system_prompt_editor(self):
         """打开系统提示词编辑窗口"""
-        self.system_prompt_window = tk.Toplevel(self.root)
-        self.system_prompt_window.title("系统提示词")
-        self.system_prompt_window.geometry("600x400")
-
-        # 创建文本框
-        self.system_prompt_text = tk.Text(self.system_prompt_window, wrap=tk.WORD, height=10)
-        self.system_prompt_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-        self.system_prompt_text.insert(tk.END, self.system_prompt)  # 显示当前系统提示词
-
-        # 创建保存按钮
-        save_button = tk.Button(self.system_prompt_window, text="保存", command=self.save_system_prompt)
-        save_button.pack(pady=10)
-
-    def save_system_prompt(self):
-        """保存系统提示词"""
-        new_system_prompt = self.system_prompt_text.get("1.0", tk.END).strip()
-        self.system_prompt = new_system_prompt
-
-        # 检查对话历史中是否包含 system 消息
-        system_message_index = -1
-        for i, message in enumerate(self.conversation_history):
-            if message["role"] == "system":
-                system_message_index = i
-                break
-
-        if system_message_index != -1:
-            # 如果存在 system 消息，更新其内容
-            self.conversation_history[system_message_index]["content"] = new_system_prompt
-        else:
-            # 如果不存在 system 消息，插入到对话历史的最前面
-            self.conversation_history.insert(0, {"role": "system", "content": new_system_prompt})
-
-        messagebox.showinfo("成功", "系统提示词已更新并立即生效")
-        self.system_prompt_window.destroy()
+        self.system_prompt_manager.open_system_prompt_editor()
 
 
 if __name__ == "__main__":

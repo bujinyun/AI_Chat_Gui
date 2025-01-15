@@ -1,0 +1,14 @@
+[
+    {
+        "role": "system",
+        "content": ""
+    },
+    {
+        "role": "user",
+        "content": "1"
+    },
+    {
+        "role": "assistant",
+        "content": "It seems like you've entered \"1.\" Could you clarify what you're looking for? Are you asking a question, need help with something, or just testing? Let me know how I can assist! 😊"
+    }
+]

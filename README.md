@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![GUI](https://img.shields.io/badge/GUI-Tkinter-orange)
 
-**DeepSeek Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、对话管理、系统提示词管理、Prompt 管理等功能。
+**DeepSeek Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、配置API+max_token、对话管理、系统提示词管理、Prompt 管理、历史对话管理等功能。
 
 ## 功能特性
 
@@ -12,21 +12,26 @@
   - 支持与 DeepSeek API 进行多轮对话。
   - 可清空对话历史。
   - 支持多行输入和快捷键发送消息（`Enter` 发送，`Shift+Enter` 换行）。
-
+- **参数配置**：
+  - 支持自定义 DeepSeek API 密钥和模型选择。
+  - 提供温度参数调节，适用于不同场景（如代码生成、创意写作等）。
+  - 更改max_token参数，调整最大输出
+  - 更改最大上下文历史的对话数，同时还保留系统提示词
 - **Prompt 管理**：
   - 支持保存、加载和删除 Prompt。
   - 支持覆盖保存同名 Prompt。
   - 提供筛选功能，方便快速查找 Prompt。
   - 支持将 Prompt 内容插入到输入框中。
-
-- **API 配置**：
-  - 支持自定义 DeepSeek API 密钥和模型选择。
-  - 提供温度参数调节，适用于不同场景（如代码生成、创意写作等）。
-  - 更改max_token参数，调整最大输出
-  - 更改最大上下文历史的对话数，同时还保留系统提示词
-  
+  - 支持将 Prompt 内容插入到系统提示词中。
+- **系统提示词管理**：
+  - 自定义写入system内容。
+  - system部分不会因对话数过长而被删除
+- **历史对话**：
+  - 支持将历史对话保存为json、与md
+  - 可在历史对话界面，预览、加载、删除json保存的历史对话
 - **用户界面**：
   - 使用 Tkinter 构建，界面简洁易用。
+  - 支持缩放字体大小
   - 支持弹出窗口显示最新回复，并提供复制和保存功能。
 
 ## 安装与运行
@@ -79,9 +84,13 @@ python deepseek.py
 
 ```
 AI_Chat_Gui/
-├── deepseek.py       # 主程序文件
-├── prompts/                   # Prompts 存储目录
-├── README.md                  # 项目说明文件
+├── deepseek.py               # 主程序文件
+├── ai_answer/                # AI回答相关文档
+├── build/                    # 构建输出目录
+├── history/                  # 历史对话记录
+├── prompts/                  # Prompts 存储目录
+├── prompts_manager/          # Prompt管理模块
+├── README.md                 # 项目说明文件
 ```
 
 ## 贡献指南
@@ -97,6 +106,3 @@ AI_Chat_Gui/
 ## 许可证
 
 本项目采用 [MIT 许可证](LICENSE)。
-
-
-

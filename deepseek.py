@@ -10,26 +10,8 @@ from prompts_manager.prompts_manager import PromptsManager
 from prompts_manager.system_prompt_manager import SystemPromptManager
 
 
-
-# 默认配置,实测max_tokens=8000好于8192
-DEFAULT_CONFIG = {
-    "API_URL": "https://api.deepseek.com/chat/completions",
-    "API_KEY": "you_api_key",
-    "max_history_length": 100,
-    "max_tokens": 8000 
-}
-
-
-# 配置文件路径
-CONFIG_FILE = "config.json"
-
-# Prompts 文件存储目录
-PROMPTS_DIR = "prompts"
-if not os.path.exists(PROMPTS_DIR):
-    os.makedirs(PROMPTS_DIR)
-
 # 加载配置文件
-def load_config():
+def load_config(CONFIG_FILE = "config.json"):
     """从 config.json 文件中加载配置"""
     if os.path.exists(CONFIG_FILE):
         try:
@@ -39,11 +21,10 @@ def load_config():
         except Exception as e:
             print(f"加载配置文件失败: {str(e)}")
             return DEFAULT_CONFIG
-    else:
-        return DEFAULT_CONFIG
+    return DEFAULT_CONFIG
 
 # 保存配置文件
-def save_config(config):
+def save_config(config,CONFIG_FILE = "config.json"):
     """将配置保存到 config.json 文件中"""
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as file:
@@ -51,17 +32,17 @@ def save_config(config):
     except Exception as e:
         print(f"保存配置文件失败: {str(e)}")
 
-# 加载初始配置
-config = load_config()
-API_URL = config.get("API_URL", DEFAULT_CONFIG["API_URL"])
-API_KEY = config.get("API_KEY", DEFAULT_CONFIG["API_KEY"])
 
 class DeepSeekChatApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("DeepSeek Chat")
+        self.root.title("AI Chat")
 
         # 加载配置
+        self.CONFIG_FILE = "deepseekconfig.json"
+        config = load_config(self.CONFIG_FILE)
+        self.API_URL = config.get("API_URL", DEFAULT_CONFIG["API_URL"])
+        self.API_KEY = config.get("API_KEY", DEFAULT_CONFIG["API_KEY"])
         self.max_history_length = config.get("max_history_length", DEFAULT_CONFIG["max_history_length"])
         self.max_tokens = config.get("max_tokens", DEFAULT_CONFIG["max_tokens"])
 
@@ -80,8 +61,12 @@ class DeepSeekChatApp:
 
         # 添加模型选择下拉菜单
         tk.Label(self.control_frame, text="选择模型:").pack(side=tk.LEFT)
-        self.model_menu = tk.OptionMenu(self.control_frame, self.selected_model, *self.models)
+        self.model_menu = ttk.Combobox(self.control_frame, textvariable=self.selected_model, values=self.models, state="readonly")
         self.model_menu.pack(side=tk.LEFT, padx=(5, 10))
+        # 阻止模型选择菜单的缩放
+        self.model_menu.bind('<Control-MouseWheel>', lambda e: "break")
+        self.model_menu.bind('<Control-Button-4>', lambda e: "break")  # Linux zoom prevention
+        self.model_menu.bind('<Control-Button-5>', lambda e: "break")  # Linux zoom prevention
 
         # 添加温度选择下拉菜单
         self.temperature_options = {
@@ -93,7 +78,7 @@ class DeepSeekChatApp:
         }
         self.selected_temperature = tk.StringVar(value="通用对话")  # 默认选择
         tk.Label(self.control_frame, text="场景选择:").pack(side=tk.LEFT, padx=(10, 5))
-        self.temperature_menu = tk.OptionMenu(self.control_frame, self.selected_temperature, *self.temperature_options.keys())
+        self.temperature_menu = ttk.Combobox(self.control_frame, textvariable=self.selected_temperature, values=list(self.temperature_options.keys()), state="readonly")
         self.temperature_menu.pack(side=tk.LEFT)
 
         # 添加 Prompts 管理按钮
@@ -115,20 +100,70 @@ class DeepSeekChatApp:
         self.system_prompt_button = tk.Button(self.control_frame, text="系统提示词", command=self.open_system_prompt_editor)
         self.system_prompt_button.pack(side=tk.RIGHT, padx=(10, 0))
 
+        # 初始化字体大小
+        self.font_size = 12
+        self.min_font_size = 8
+        self.max_font_size = 36
+        
+        # 创建样式对象并配置
+        self.style = ttk.Style()
+        # 配置文本控件样式
+        self.style.configure('TText', 
+            font=('Arial', self.font_size),
+            foreground='black',
+            background='white',
+            padding=5,
+            wrap=tk.WORD
+        )
+        # 配置按钮样式
+        self.style.configure('TButton',
+            font=('Arial', self.font_size),
+            padding=5,
+            relief=tk.RAISED
+        )
+        # 配置滚动条样式
+        self.style.configure('Vertical.TScrollbar',
+            gripcount=0,
+            background='#E1E1E1',
+            troughcolor='#F0F0F0',
+            arrowsize=15
+        )
+
+        # 创建聊天容器
+        self.chat_container = tk.Frame(root)
+        self.chat_container.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
         # 创建聊天显示区域
-        self.chat_display = scrolledtext.ScrolledText(root, wrap=tk.WORD, state='disabled')
-        self.chat_display.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        self.chat_display = scrolledtext.ScrolledText(
+            self.chat_container, 
+            wrap=tk.WORD, 
+            state='disabled',
+            font=('Arial', self.font_size),
+            height=24,  # Set a fixed height
+            width=60    # Set a fixed width
+        )
+        
+        # 绑定 Ctrl+鼠标滚轮事件 - 仅允许字体缩放
+        self.chat_display.bind('<Control-MouseWheel>', self.zoom_font)
+        self.chat_display.bind('<Control-Button-4>', self.zoom_font)  # Linux zoom
+        self.chat_display.bind('<Control-Button-5>', self.zoom_font)  # Linux zoom
+        self.chat_display.pack(fill=tk.BOTH, expand=True)
+        
+        # 设置容器最大高度
+        self.chat_container.pack_propagate(False)
+        self.chat_container.config(height=420)  # 设置固定高度
 
         # 创建输入框和发送按钮
         self.input_frame = tk.Frame(root)
         self.input_frame.pack(padx=10, pady=10, fill=tk.X)
 
         # 使用Text控件代替Entry，并添加滚动条
-        self.user_input = tk.Text(self.input_frame, height=5, wrap=tk.WORD)
-        self.user_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.user_input = tk.Text(self.input_frame, height=5, wrap=tk.WORD, font=('Arial', 12))
+        self.user_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
+
 
         # 添加垂直滚动条
-        scrollbar = tk.Scrollbar(self.input_frame, command=self.user_input.yview)
+        scrollbar = ttk.Scrollbar(self.input_frame, command=self.user_input.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.user_input.config(yscrollcommand=scrollbar.set)
 
@@ -204,83 +239,117 @@ class DeepSeekChatApp:
         self.history_window.title("历史对话")
         self.history_window.geometry("800x600")
 
+        # 使用grid布局
+        self.history_window.grid_columnconfigure(0, weight=1)
+        self.history_window.grid_rowconfigure(1, weight=1)
+
         # 创建主容器
         main_frame = tk.Frame(self.history_window)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+
+        # 配置主容器grid布局
+        main_frame.grid_columnconfigure(1, weight=1)
+        main_frame.grid_rowconfigure(0, weight=1)
 
         # 创建文件列表
-        self.file_listbox = tk.Listbox(main_frame, selectmode=tk.SINGLE)
-        self.file_listbox.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        self.file_listbox = ttk.Treeview(main_frame, selectmode="browse", show="tree")
+        self.file_listbox.grid(row=0, column=0, sticky='ns', padx=(0, 10))
 
         # 添加滚动条
         scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.file_listbox.yview)
-        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+        scrollbar.grid(row=0, column=1, sticky='ns')
         self.file_listbox.config(yscrollcommand=scrollbar.set)
+        
+        # 阻止所有ttk控件的缩放事件
+        self.file_listbox.bind('<Control-MouseWheel>', lambda e: "break")
+        scrollbar.bind('<Control-MouseWheel>', lambda e: "break")
+
 
         # 创建预览区域
         preview_frame = tk.Frame(main_frame)
-        preview_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        preview_frame.grid(row=0, column=2, sticky='nsew')
+
+        # 配置预览区域grid布局
+        preview_frame.grid_columnconfigure(0, weight=1)
+        preview_frame.grid_rowconfigure(1, weight=1)
 
         # 添加预览标题
-        tk.Label(preview_frame, text="对话预览", font=("Arial", 12, "bold")).pack(pady=(0, 10))
+        tk.Label(preview_frame, text="对话预览", font=("Arial", 13)).grid(row=0, column=0, sticky='w', pady=(0, 5))
 
         # 添加预览文本框
-        self.preview_text = tk.Text(preview_frame, wrap=tk.WORD, state=tk.DISABLED)
-        self.preview_text.pack(fill=tk.BOTH, expand=True)
+        self.preview_text = scrolledtext.ScrolledText(
+            preview_frame, 
+            wrap=tk.WORD, 
+            state=tk.DISABLED, 
+            font=('Arial', 12)
+        )
+        # 阻止所有缩放事件
+        self.preview_text.bind('<Control-MouseWheel>', lambda e: "break")
+        self.preview_text.bind('<Control-Button-4>', lambda e: "break")  # Linux zoom prevention
+        self.preview_text.bind('<Control-Button-5>', lambda e: "break")  # Linux zoom prevention
+        self.preview_text.bind('<Control-plus>', lambda e: "break")  # 阻止Ctrl+加号
+        self.preview_text.bind('<Control-minus>', lambda e: "break")  # 阻止Ctrl+减号
+        self.preview_text.bind('<Control-equal>', lambda e: "break")  # 阻止Ctrl+等号
+        self.preview_text.grid(row=1, column=0, sticky='nsew')
 
         # 添加按钮容器
         button_frame = tk.Frame(self.history_window)
-        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        button_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 10))
 
         # 添加加载按钮
-        load_button = tk.Button(button_frame, text="加载", command=self.load_selected_history)
+        load_button = tk.Button(button_frame, text="加载", command=self.load_selected_history, width=10)
         load_button.pack(side=tk.LEFT, padx=5)
 
         # 添加删除按钮
-        delete_button = tk.Button(button_frame, text="删除", command=self.delete_selected_history)
+        delete_button = tk.Button(button_frame, text="删除", command=self.delete_selected_history, width=10)
         delete_button.pack(side=tk.LEFT, padx=5)
 
         # 添加关闭按钮
-        close_button = tk.Button(button_frame, text="关闭", command=self.history_window.destroy)
+        close_button = tk.Button(button_frame, text="关闭", command=self.history_window.destroy, width=10)
         close_button.pack(side=tk.RIGHT)
 
         # 加载历史文件列表
         self.load_history_files()
 
         # 绑定选择事件
-        self.file_listbox.bind("<<ListboxSelect>>", self.show_preview)
+        self.file_listbox.bind("<<TreeviewSelect>>", self.show_preview)
 
     def load_history_files(self):
         """加载历史文件列表"""
-        self.file_listbox.delete(0, tk.END)
+        self.file_listbox.delete(*self.file_listbox.get_children())
         try:
             files = [f for f in os.listdir(self.history_dir) if f.endswith(".json")]
             for file in sorted(files, reverse=True):
-                self.file_listbox.insert(tk.END, file)
+                self.file_listbox.insert("", tk.END, text=file)
         except Exception as e:
             messagebox.showerror("错误", f"无法加载历史文件: {str(e)}")
 
     def show_preview(self, event):
         """显示选中文件的预览"""
-        selection = self.file_listbox.curselection()
+        selection = self.file_listbox.selection()
         if not selection:
             return
 
-        selected_file = self.file_listbox.get(selection[0])
+        selected_file = self.file_listbox.item(selection[0], "text")
         file_path = os.path.join(self.history_dir, selected_file)
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 history = json.load(f)
-                preview_text = ""
-                for msg in history[-10:]:  # 显示最后10条消息
-                    role = msg["role"]
-                    content = msg["content"]
-                    preview_text += f"{role.capitalize()}: {content[:100]}...\n\n"
-
                 self.preview_text.config(state=tk.NORMAL)
                 self.preview_text.delete(1.0, tk.END)
-                self.preview_text.insert(tk.END, preview_text)
+                
+                # 配置红色文本标签
+                self.preview_text.tag_config('red', foreground='red')
+                
+                for msg in history[-10:]:  # 显示最后10条消息
+                    role = msg["role"].capitalize()
+                    content = msg["content"][:100] + "..."
+                    
+                    # 插入带格式的文本
+                    self.preview_text.insert(tk.END, role + ": ", 'red')
+                    self.preview_text.insert(tk.END, content + "\n\n")
+                
                 self.preview_text.config(state=tk.DISABLED)
         except Exception as e:
             self.preview_text.config(state=tk.NORMAL)
@@ -290,12 +359,12 @@ class DeepSeekChatApp:
 
     def load_selected_history(self):
         """加载选中的历史对话"""
-        selection = self.file_listbox.curselection()
+        selection = self.file_listbox.selection()
         if not selection:
             messagebox.showwarning("警告", "请先选择一个历史文件")
             return
 
-        selected_file = self.file_listbox.get(selection[0])
+        selected_file = self.file_listbox.item(selection[0], "text")
         file_path = os.path.join(self.history_dir, selected_file)
 
         try:
@@ -335,12 +404,12 @@ class DeepSeekChatApp:
 
     def delete_selected_history(self):
         """删除选中的历史对话"""
-        selection = self.file_listbox.curselection()
+        selection = self.file_listbox.selection()
         if not selection:
             messagebox.showwarning("警告", "请先选择一个历史文件")
             return
 
-        selected_file = self.file_listbox.get(selection[0])
+        selected_file = self.file_listbox.item(selection[0], "text")
         file_path = os.path.join(self.history_dir, selected_file)
 
         try:
@@ -365,43 +434,181 @@ class DeepSeekChatApp:
 
     def display_message(self, sender, message):
         """显示消息到聊天窗口"""
+        # 配置红色文本标签
+        self.chat_display.tag_config('red', foreground='red')
+        
         self.chat_display.config(state='normal')  # 启用编辑
-        self.chat_display.insert(tk.END, f"{sender}: {message}\n\n")
+        # 插入带格式的文本
+        self.chat_display.insert(tk.END, sender + ": ", 'red')
+        self.chat_display.insert(tk.END, message + "\n\n")
         self.chat_display.config(state='disabled')  # 禁用编辑
         self.chat_display.yview(tk.END)  # 自动滚动到底部        
         # 如果是AI的回复，显示在弹出窗口
-        if sender == "DeepSeek":
+        if sender == self.selected_model.get():
             self.show_popup(message)
     
     def show_popup(self, message):
         """显示最新回复的弹出窗口"""
-        popup = tk.Toplevel(self.root)
-        popup.title("最新回复")
-        popup.geometry("600x400")
+        self.popup = tk.Toplevel(self.root)
+        self.popup.title("最新回复")
+        self.popup.geometry("600x400")
+        
+        # 创建主容器
+        main_frame = tk.Frame(self.popup)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 配置网格布局
+        main_frame.grid_rowconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(0, weight=1)
+        
+        # 创建文本容器
+        text_container = tk.Frame(main_frame)
+        text_container.grid(row=0, column=0, sticky='nsew')
+        
+        # 配置文本容器网格
+        text_container.grid_rowconfigure(0, weight=1)
+        text_container.grid_columnconfigure(0, weight=1)
         
         # 创建文本框
-        text_box = scrolledtext.ScrolledText(popup, wrap=tk.WORD)
-        text_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        text_box.insert(tk.END, message)
-        text_box.config(state='disabled')
+        self.popup_text_box = tk.Text(
+            text_container, 
+            wrap=tk.WORD, 
+            font=('Arial', 12),
+            width=80,  # Initial width in characters
+            height=20  # Initial height in lines
+        )
+        self.popup_text_box.insert(tk.END, message)
+        self.popup_text_box.config(state='disabled')
+        
+        # 添加垂直滚动条
+        v_scroll = ttk.Scrollbar(text_container, orient=tk.VERTICAL, command=self.popup_text_box.yview)
+        self.popup_text_box.config(yscrollcommand=v_scroll.set)
+        
+        # 布局文本框和滚动条
+        self.popup_text_box.grid(row=0, column=0, sticky='nsew')
+        v_scroll.grid(row=0, column=1, sticky='ns')
+        
+        # 配置网格权重
+        text_container.grid_rowconfigure(0, weight=1)
+        text_container.grid_columnconfigure(0, weight=1)
+        
+        # 添加字体缩放功能
+        self.popup_text_box.bind('<Control-MouseWheel>', self.zoom_popup_font)
+
+        
+        # 初始化弹出窗口字体大小
+        self.popup_font_size = 12
         
         # 创建按钮容器
-        button_frame = tk.Frame(popup)
-        button_frame.pack(side=tk.BOTTOM, pady=10)
+        button_frame = tk.Frame(main_frame)
+        button_frame.grid(row=1, column=0, sticky='ew', pady=(10, 0))
+        
+        # 配置按钮容器列权重
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
         
         # 添加复制按钮
         copy_button = tk.Button(button_frame, text="复制", command=lambda: self.copy_to_clipboard(message), width=10)
-        copy_button.pack(side=tk.LEFT, padx=5)
+        copy_button.grid(row=0, column=0, padx=5)
         
         # 添加保存为.md文件按钮
         save_button = tk.Button(button_frame, text="保存", command=lambda: self.save_as_md(message), width=10)
-        save_button.pack(side=tk.LEFT, padx=5)
+        save_button.grid(row=0, column=1, padx=5)
+
+        # 允许窗口大小调整
+        self.popup.resizable(True, True)
+        
+        # 绑定窗口大小变化事件
+        self.popup.bind('<Configure>', self.handle_popup_resize)
+        
+        # 绑定字体缩放事件
+        def zoom_font(event):
+            if event.delta > 0:  # 向上滚动
+                self.font_size = min(self.font_size + 1, self.max_font_size)
+            else:  # 向下滚动
+                self.font_size = max(self.font_size - 1, self.min_font_size)
+            
+            # 更新弹出窗口字体
+            self.popup_text_box.config(font=('Arial', self.font_size))
+            self.popup_text_box.update_idletasks()
+        
+        self.popup_text_box.bind('<Control-MouseWheel>', zoom_font)
+
+        
 
     def copy_to_clipboard(self, text):
         """复制文本到剪贴板"""
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         messagebox.showinfo("成功", "文本已复制到剪贴板")
+
+    def zoom_font(self, event):
+        """通过Ctrl+鼠标滚轮缩放聊天窗口字体"""
+        # 保存当前滚动位置
+        chat_scroll_position = self.chat_display.yview()
+        
+        # 计算缩放方向
+        if event.delta > 0:  # 向上滚动
+            self.font_size = min(self.font_size + 1, self.max_font_size)
+        else:  # 向下滚动
+            self.font_size = max(self.font_size - 1, self.min_font_size)
+        
+        # 更新聊天窗口字体
+        self.chat_display.config(font=('Arial', self.font_size))
+        
+        
+        # 强制更新布局
+        self.chat_display.update_idletasks()
+        
+        # 恢复滚动位置
+        self.chat_display.yview_moveto(chat_scroll_position[0])
+
+    def handle_popup_resize(self, event):
+        """处理弹出窗口大小变化"""
+        if not hasattr(self, 'popup_text_box') or not self.popup_text_box.winfo_exists():
+            return
+        
+        # 获取窗口新尺寸
+        new_width = event.width - 20  # 减去padding
+        new_height = event.height - 100  # 减去按钮区域高度
+        
+        # 更新文本框尺寸
+        self.popup_text_box.config(width=new_width, height=new_height)
+        self.popup_text_box.update_idletasks()
+
+    def zoom_popup_font(self, event):
+        """通过Ctrl+鼠标滚轮缩放弹出窗口字体"""
+        # 计算缩放方向
+        if event.delta > 0:  # 向上滚动
+            self.font_size = min(self.font_size + 1, self.max_font_size)
+        else:  # 向下滚动
+            self.font_size = max(self.font_size - 1, self.min_font_size)
+        
+        # 更新弹出窗口字体
+        if hasattr(self, 'popup_text_box') and self.popup_text_box.winfo_exists():
+            self.popup_text_box.config(font=('Arial', self.font_size))
+            self.popup_text_box.update_idletasks()
+        
+        # 更新主聊天窗口字体
+        self.chat_display.config(font=('Arial', self.font_size))
+        self.chat_display.update_idletasks()
+
+    def update_fonts(self):
+        """更新聊天窗口字体大小"""
+        # 获取聊天窗口当前尺寸
+        chat_height = int(self.chat_display.cget('height'))
+        chat_width = int(self.chat_display.cget('width'))
+        
+        # 更新聊天窗口字体
+        self.chat_display.config(
+            font=('Arial', self.font_size),
+            height=chat_height,
+            width=chat_width,
+            wrap=tk.WORD
+        )
+        
+        # 强制更新布局
+        self.chat_display.update_idletasks()
 
     def save_as_md(self, text):
         """将文本保存为.md文件"""
@@ -477,7 +684,7 @@ class DeepSeekChatApp:
                 self.conversation_history.insert(0, {"role": "system", "content": self.system_prompt})
 
         headers = {
-            "Authorization": f"Bearer {API_KEY}",
+            "Authorization": f"Bearer {self.API_KEY}",
             "Content-Type": "application/json"
         }
         data = {
@@ -497,7 +704,7 @@ class DeepSeekChatApp:
         for attempt in range(max_retries):
             try:
                 # 移除超时限制
-                response = requests.post(API_URL, headers=headers, json=data, timeout=None)
+                response = requests.post(self.API_URL, headers=headers, json=data, timeout=None)
                 response.raise_for_status()
                 
                 #检查传参
@@ -505,13 +712,11 @@ class DeepSeekChatApp:
                 print("max_tokens:",data["max_tokens"])
                 print("API 响应:", response.json()['usage']) 
 
-
-
                 ai_response = response.json()['choices'][0]['message']['content']
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 self.hide_loading()
                 # 在主线程中显示AI回复
-                self.root.after(0, self.display_message, "DeepSeek", ai_response)
+                self.root.after(0, self.display_message, self.selected_model.get(), ai_response)
                 return
             except requests.exceptions.Timeout:
                 # 检查是否超过 5 分钟
@@ -553,10 +758,10 @@ class DeepSeekChatApp:
         def open_website():
             webbrowser.open("https://status.deepseek.com/")
 
-        tk.Button(popup, text="访问官网", command=open_website).pack(pady=10)
+        ttk.Button(popup, text="访问官网", command=open_website).pack(pady=10)
 
         # 添加关闭按钮
-        tk.Button(popup, text="关闭", command=popup.destroy).pack(pady=10)
+        ttk.Button(popup, text="关闭", command=popup.destroy).pack(pady=10)
 
     def open_settings(self):
         """打开设置窗口"""
@@ -569,30 +774,30 @@ class DeepSeekChatApp:
 
         # 添加 API URL 输入框
         tk.Label(self.settings_window, text="API URL:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        self.api_url_entry = tk.Entry(self.settings_window, width=40)
+        self.api_url_entry = ttk.Entry(self.settings_window, width=40)
         self.api_url_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-        self.api_url_entry.insert(0, API_URL)  # 显示当前 API URL
+        self.api_url_entry.insert(0, self.API_URL)  # 显示当前 API URL
 
         # 添加 API Key 输入框
         tk.Label(self.settings_window, text="API Key:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
-        self.api_key_entry = tk.Entry(self.settings_window, width=40)
+        self.api_key_entry = ttk.Entry(self.settings_window, width=40)
         self.api_key_entry.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
-        self.api_key_entry.insert(0, API_KEY)  # 显示当前 API Key
+        self.api_key_entry.insert(0, self.API_KEY)  # 显示当前 API Key
 
-        # 添加最大历史记录长度输入框
-        tk.Label(self.settings_window, text="最大历史记录长度:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
-        self.max_history_entry = tk.Entry(self.settings_window, width=40)
+        # 添加最大历史对话数输入框
+        tk.Label(self.settings_window, text="最大历史对话数:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        self.max_history_entry = ttk.Entry(self.settings_window, width=40)
         self.max_history_entry.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
-        self.max_history_entry.insert(0, str(self.max_history_length))  # 显示当前最大历史记录长度
+        self.max_history_entry.insert(0, str(self.max_history_length))  # 显示当前最大历史对话数
 
         # 添加最大 Token 数输入框
         tk.Label(self.settings_window, text="最大 Token 数:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
-        self.max_tokens_entry = tk.Entry(self.settings_window, width=40)
+        self.max_tokens_entry = ttk.Entry(self.settings_window, width=40)
         self.max_tokens_entry.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
         self.max_tokens_entry.insert(0, str(self.max_tokens))  # 显示当前最大 Token 数
 
         # 添加保存按钮
-        save_button = tk.Button(self.settings_window, text="保存", command=self.save_settings)
+        save_button = tk.Button(self.settings_window, text="保存", command=self.save_settings, width=10)
         save_button.grid(row=4, column=0, columnspan=2, pady=20)
 
     def save_settings(self):
@@ -604,22 +809,19 @@ class DeepSeekChatApp:
             new_max_history = int(self.max_history_entry.get().strip())
             new_max_tokens = int(self.max_tokens_entry.get().strip())
 
-            # 更新全局变量
-            global API_URL, API_KEY
-            API_URL = new_api_url
-            API_KEY = new_api_key
-
             # 更新实例变量
+            self.API_URL = new_api_url
+            self.API_KEY = new_api_key
             self.max_history_length = new_max_history
             self.max_tokens = new_max_tokens
 
             # 保存配置到文件
             save_config({
-                "API_URL": API_URL,
-                "API_KEY": API_KEY,
+                "API_URL": self.API_URL,
+                "API_KEY": self.API_KEY,
                 "max_history_length": self.max_history_length,
                 "max_tokens": self.max_tokens
-            })
+            },self.CONFIG_FILE)
 
             # 显示成功消息
             messagebox.showinfo("成功", "设置已保存")
@@ -636,7 +838,16 @@ class DeepSeekChatApp:
         self.system_prompt_manager.open_system_prompt_editor()
 
 
+
 if __name__ == "__main__":
+    # 默认配置,实测max_tokens=8000好于8192
+    DEFAULT_CONFIG = {
+        "API_URL": "https://api.deepseek.com/chat/completions",
+        "API_KEY": "sk-dd4d4f01fdaf48b9a20c7219269fb78f",
+        "max_history_length": 100,
+        "max_tokens": 8000 
+    }
+
     root = tk.Tk()
     app = DeepSeekChatApp(root)
     root.mainloop()

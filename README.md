@@ -1,19 +1,21 @@
-# DeepSeek Chat GUI
+# AI Chat GUI
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![GUI](https://img.shields.io/badge/GUI-Tkinter-orange)
 
-**DeepSeek Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、配置API+max_token、对话管理、系统提示词管理、Prompt 管理、历史对话管理等功能。
+**AI Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、配置API+max_token、对话管理、系统提示词管理、Prompt 管理、历史对话管理等功能。
+
+现支持deepseek、gpt4、o1(o1模型自带限制不设置temperature、system)
 
 ## 功能特性
 
 - **对话管理**：
-  - 支持与 DeepSeek API 进行多轮对话。
+  - 支持与 AI API 进行多轮对话。
   - 可清空对话历史。
   - 支持多行输入和快捷键发送消息（`Enter` 发送，`Shift+Enter` 换行）。
 - **参数配置**：
-  - 支持自定义 DeepSeek API 密钥和模型选择。
+  - 支持自定义 AI API 密钥和模型选择。
   - 提供温度参数调节，适用于不同场景（如代码生成、创意写作等）。
   - 更改max_token参数，调整最大输出
   - 更改最大上下文历史的对话数，同时还保留系统提示词
@@ -29,6 +31,7 @@
 - **历史对话**：
   - 支持将历史对话保存为json、与md
   - 可在历史对话界面，预览、加载、删除json保存的历史对话
+  - 支持对历史对话进行回撤，通过加载与回撤可达到分支历史对话的效果
 - **用户界面**：
   - 使用 Tkinter 构建，界面简洁易用。
   - 支持缩放字体大小
@@ -67,7 +70,9 @@ python deepseek.py
 
 ```
 AI_Chat_Gui/
-├── deepseek.py               # 主程序文件
+├── deepseek.py               # deepseek主程序文件
+├── gpt4.py                   # gpt4主程序文件
+├── o1.py                     # o1主程序文件
 ├── ai_answer/                # AI回答相关文档
 ├── build/                    # 构建输出目录
 ├── history/                  # 历史对话记录

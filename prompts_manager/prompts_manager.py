@@ -6,9 +6,10 @@ from prompts_manager.system_prompt_manager import SystemPromptManager
 
 
 class PromptsManager:
-    def __init__(self, root, main_app=None, main_input=None, system_prompt_input=None, prompts_dir="prompts"):
+    def __init__(self, root, main_app=None, main_input=None, system_prompt_input=None, prompts_dir="prompts", show_copysystem_button=True):
         self.root = root
         self.main_app = main_app  # Store reference to main application
+        self.show_copysystem_button = show_copysystem_button
         self.prompts_dir = prompts_dir
         self.main_input = main_input
         self.system_prompt_input = system_prompt_input
@@ -91,8 +92,9 @@ class PromptsManager:
         open_prompt_button.pack(side=tk.LEFT, padx=5)
 
         # 添加复制到系统提示词按钮
-        copy_to_system_prompt_button = tk.Button(button_frame, text="复制到系统提示词", command=self.copy_to_system_prompt, width=15)
-        copy_to_system_prompt_button.pack(side=tk.LEFT, padx=5)
+        if self.show_copysystem_button:
+            copy_to_system_prompt_button = tk.Button(button_frame, text="复制到系统提示词", command=self.copy_to_system_prompt, width=15)
+            copy_to_system_prompt_button.pack(side=tk.LEFT, padx=5)
 
         # 添加删除按钮
         delete_button = tk.Button(button_frame, text="删除", command=self.delete_selected_prompt, width=10)

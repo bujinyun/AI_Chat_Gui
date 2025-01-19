@@ -102,8 +102,8 @@ class DeepSeekChatApp:
 
         # 初始化字体大小
         self.font_size = 12
-        self.min_font_size = 8
-        self.max_font_size = 36
+        self.min_font_size = 6
+        self.max_font_size = 40
         
         # 创建样式对象并配置
         self.style = ttk.Style()
@@ -139,8 +139,7 @@ class DeepSeekChatApp:
             wrap=tk.WORD, 
             state='disabled',
             font=('Arial', self.font_size),
-            height=24,  # Set a fixed height
-            width=60    # Set a fixed width
+
         )
         
         # 绑定 Ctrl+鼠标滚轮事件 - 仅允许字体缩放
@@ -151,7 +150,7 @@ class DeepSeekChatApp:
         
         # 设置容器最大高度
         self.chat_container.pack_propagate(False)
-        self.chat_container.config(height=420)  # 设置固定高度
+        self.chat_container.config(height=480)  # 设置固定高度
 
         # 创建输入框和发送按钮
         self.input_frame = tk.Frame(root)
@@ -159,7 +158,7 @@ class DeepSeekChatApp:
 
         # 使用Text控件代替Entry，并添加滚动条
         self.user_input = tk.Text(self.input_frame, height=5, wrap=tk.WORD, font=('Arial', 12))
-        self.user_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
+        self.user_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
 
         # 添加垂直滚动条
@@ -175,13 +174,21 @@ class DeepSeekChatApp:
         self.send_button = tk.Button(self.button_frame, text="发送", command=self.send_message, width=10, height=2)
         self.send_button.pack(side=tk.BOTTOM, pady=(0, 5))
 
+        # 创建顶部按钮容器
+        self.top_button_frame = tk.Frame(self.button_frame)
+        self.top_button_frame.pack(side=tk.TOP)
+
+        # 撤回按钮
+        self.undo_button = tk.Button(self.top_button_frame, text="撤回", command=self.undo_last_message, width=4)
+        self.undo_button.pack(side=tk.LEFT, padx=(0, 2))
+
         # 清空历史按钮
-        self.clear_history_button = tk.Button(self.button_frame, text="清空历史", command=self.clear_history, width=10)
-        self.clear_history_button.pack(side=tk.TOP, pady=(0, 5))
+        self.clear_history_button = tk.Button(self.top_button_frame, text="清空", command=self.clear_history, width=4)
+        self.clear_history_button.pack(side=tk.LEFT)
 
         # 保存历史按钮
         self.save_history_button = tk.Button(self.button_frame, text="保存历史", command=self.save_history, width=10)
-        self.save_history_button.pack(side=tk.TOP)
+        self.save_history_button.pack(side=tk.TOP, pady=(1, 1))
 
         # 添加加载指示器
         self.loading_label = tk.Label(root, text="", fg="blue")
@@ -632,6 +639,27 @@ class DeepSeekChatApp:
         self.send_message()
         return 'break'  # 阻止默认行为
 
+    def undo_last_message(self):
+        """撤回最后一条消息"""
+        if len(self.conversation_history) < 2:  # 至少需要一条用户消息和一条AI回复
+            messagebox.showwarning("警告", "没有可撤回的消息")
+            return
+
+        # 移除最后两条消息（用户消息和AI回复）
+        self.conversation_history = self.conversation_history[:-2]
+        
+        # 更新聊天显示
+        self.chat_display.config(state='normal')
+        self.chat_display.delete("1.0", tk.END)
+        
+        # 重新显示剩余的历史消息
+        for msg in self.conversation_history:
+            if msg["role"] != "system":  # 不显示系统提示
+                self.display_message(msg["role"].capitalize(), msg["content"])
+        
+        self.chat_display.config(state='disabled')
+        self.display_message("系统", "已撤回最后一条对话")
+
     def clear_history(self):
         """清空对话历史"""
         self.conversation_history = []
@@ -734,7 +762,29 @@ class DeepSeekChatApp:
                 # 如果API调用失败，移除最后一条用户消息
                 self.conversation_history.pop()
                 self.hide_loading()
-                self.root.after(0, self.display_message, "系统", f"网络连接出现问题，检查api后重试。错误信息：{str(e)}")
+                
+                # 获取更多错误详情
+                error_details = str(e)
+                if hasattr(e, 'response'):
+                    try:
+                        error_details = f"Status Code: {e.response.status_code}\n"
+                        if e.response.status_code == 401:
+                            error_details += "认证失败：请检查API密钥是否正确"
+                        elif e.response.status_code == 429:
+                            error_details += "请求过多：已达到速率限制，请稍后重试"
+                        elif 500 <= e.response.status_code < 600:
+                            error_details += "服务器错误：API服务端出现问题"
+                        else:
+                            error_details += f"响应内容: {e.response.text[:200]}"
+                    except:
+                        error_details = str(e)
+                
+                self.root.after(0, self.display_message, "系统", 
+                    f"API请求失败\n"
+                    f"错误类型: {type(e).__name__}\n"
+                    f"详细信息:\n{error_details}\n"
+                    f"请检查网络连接和API配置后重试")
+
                 return
             except (KeyError, ValueError) as e:
                 self.conversation_history.pop()
@@ -843,7 +893,7 @@ if __name__ == "__main__":
     # 默认配置,实测max_tokens=8000好于8192
     DEFAULT_CONFIG = {
         "API_URL": "https://api.deepseek.com/chat/completions",
-        "API_KEY": "sk-dd4d4f01fdaf48b9a20c7219269fb78f",
+        "API_KEY": "youapi",
         "max_history_length": 100,
         "max_tokens": 8000 
     }

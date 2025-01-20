@@ -52,7 +52,7 @@ class DeepSeekChatApp:
         self.system_prompt = ""  # 默认系统提示词
 
         # 模型选择
-        self.models = ["gpt-4o-mini","gpt-4o","gpt-4-turbo","gpt-4","gpt-4-32k"]  # 可用的模型列表
+        self.models = ["gpt-4o-mini","gpt-4o","gpt-4-turbo","gpt-4","gpt-4-32k","o1","o1-mini"]  # 可用的模型列表
         self.selected_model = tk.StringVar(value=self.models[0])  # 默认选择第一个模型
 
         # 创建控制面板
@@ -74,7 +74,8 @@ class DeepSeekChatApp:
             "数据抽取/分析": 1.0,
             "通用对话": 1.3,
             "翻译": 1.3,
-            "创意类写作/诗歌创作": 1.5
+            "创意类写作/诗歌创作": 1.5,
+            "最大热度": 2.0
         }
         self.selected_temperature = tk.StringVar(value="通用对话")  # 默认选择
         tk.Label(self.control_frame, text="场景选择:").pack(side=tk.LEFT, padx=(10, 5))
@@ -715,12 +716,25 @@ class DeepSeekChatApp:
             "Authorization": f"Bearer {self.API_KEY}",
             "Content-Type": "application/json"
         }
-        data = {
-            "model": self.selected_model.get(),  # 使用选择的模型
-            "messages": self.conversation_history,
-            "temperature": self.temperature_options[self.selected_temperature.get()],  # 使用选择的温度值
-            "max_tokens": self.max_tokens
-        }
+        model = self.selected_model.get()
+        if model in ["o1", "o1-mini"]:
+            # Remove system messages for o1 and o1-mini models
+            system_messages = [msg for msg in self.conversation_history if msg["role"] == "system"]
+            if system_messages:
+                self.conversation_history = self.conversation_history[1:]
+            
+            data = {
+                "model": model,
+                "messages": self.conversation_history,
+                "max_completion_tokens": self.max_tokens
+            }
+        else:
+            data = {
+                "model": model,
+                "messages": self.conversation_history,
+                "temperature": self.temperature_options[self.selected_temperature.get()],
+                "max_tokens": self.max_tokens
+            }
 
         # 重试机制
         max_retries = 3
@@ -736,8 +750,6 @@ class DeepSeekChatApp:
                 response.raise_for_status()
                 
                 #检查传参
-                print("temperature:",data["temperature"])
-                print("max_tokens:",data["max_tokens"])
                 print("API 响应:", response.json()['usage']) 
 
                 ai_response = response.json()['choices'][0]['message']['content']

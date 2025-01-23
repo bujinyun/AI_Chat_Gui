@@ -37,6 +37,8 @@ class DeepSeekChatApp:
     def __init__(self, root):
         self.root = root
         self.root.title("AI Chat")
+        # 绑定窗口关闭事件
+        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
 
         # 加载配置
         self.CONFIG_FILE = "deepseekconfig.json"
@@ -206,10 +208,10 @@ class DeepSeekChatApp:
         self.system_prompt_manager = SystemPromptManager(root, self.prompts_manager, main_app=self)
 
     def save_history(self):
-        """保存历史对话"""
+        """保存历史对话，返回是否成功保存"""
         if not self.conversation_history:
             messagebox.showwarning("警告", "当前没有历史对话可保存")
-            return
+            return False
 
         # 弹出文件保存对话框
         file_types = [("JSON文件", "*.json"), ("Markdown文件", "*.md")]
@@ -221,7 +223,7 @@ class DeepSeekChatApp:
         )
         
         if not file_path:  # 用户取消保存
-            return
+            return False
 
         try:
             if file_path.endswith(".json"):
@@ -238,8 +240,10 @@ class DeepSeekChatApp:
                     file.write(md_content)
             
             messagebox.showinfo("成功", f"历史对话已保存为 {file_path}")
+            return True
         except Exception as e:
             messagebox.showerror("错误", f"保存文件时出错: {str(e)}")
+            return False
 
     def show_history_window(self):
         """显示历史对话窗口"""
@@ -646,6 +650,9 @@ class DeepSeekChatApp:
             messagebox.showwarning("警告", "没有可撤回的消息")
             return
 
+        # 获取最后一条用户消息
+        last_user_message = self.conversation_history[-2]["content"]
+        
         # 移除最后两条消息（用户消息和AI回复）
         self.conversation_history = self.conversation_history[:-2]
         
@@ -658,8 +665,12 @@ class DeepSeekChatApp:
             if msg["role"] != "system":  # 不显示系统提示
                 self.display_message(msg["role"].capitalize(), msg["content"])
         
+        # 将最后一条用户消息放入输入框
+        self.user_input.delete("1.0", tk.END)
+        self.user_input.insert(tk.END, last_user_message)
+        
         self.chat_display.config(state='disabled')
-        self.display_message("系统", "已撤回最后一条对话")
+        self.display_message("系统", "已撤回最后一条对话，消息已放入输入框")
 
     def clear_history(self):
         """清空对话历史"""
@@ -896,6 +907,29 @@ class DeepSeekChatApp:
     def open_system_prompt_editor(self):
         """打开系统提示词编辑窗口"""
         self.system_prompt_manager.open_system_prompt_editor()
+
+    def _has_real_conversation(self):
+        """检查是否存在真实对话内容（排除系统提示词）"""
+        if not self.conversation_history:
+            return False
+        # 如果对话历史中只有系统提示词，则认为没有真实对话
+        return any(msg.get('role') != 'system' for msg in self.conversation_history)
+
+    def on_window_close(self):
+        """处理窗口关闭事件"""
+        if self._has_real_conversation():
+            # 如果有真实对话历史，提示用户保存
+            save = messagebox.askyesnocancel("保存对话", "检测到未保存的真实对话内容，是否保存？\n"
+                                            "是 - 保存并退出\n"
+                                            "否 - 不保存直接退出\n"
+                                            "取消 - 返回程序")
+            if save is None:  # 用户点击取消
+                return
+            if save:  # 用户选择保存
+                if not self.save_history():  # 如果保存失败或取消
+                    return  # 不关闭窗口
+        # 关闭窗口
+        self.root.destroy()
 
 
 

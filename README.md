@@ -6,13 +6,13 @@
 
 **AI Chat GUI** 是一个基于 Python 和 Tkinter 的桌面应用程序，用于与 DeepSeek API 进行交互。它提供了一个用户友好的界面，支持按使用场景设置 `temperature`、配置API+max_token、对话管理、系统提示词管理、Prompt 管理、历史对话管理等功能。
 
-现支持deepseek、gpt4、o1(o1模型自带限制不设置temperature、system)
+现支持deepseek-chat、deepseek-reasoner、chatgpt4(包含o1、o3-mini默认reasoning_effort:high)
 
 ## 功能特性
 
 - **对话管理**：
   - 支持与 AI API 进行多轮对话。
-  - 可清空对话历史。
+  - 可清空与回撤对话。
   - 支持多行输入和快捷键发送消息（`Enter` 发送，`Shift+Enter` 换行）。
 - **参数配置**：
   - 支持自定义 AI API 密钥和模型选择。
@@ -72,12 +72,12 @@ python deepseek.py
 AI_Chat_Gui/
 ├── deepseek.py               # deepseek主程序文件
 ├── gpt4.py                   # gpt4主程序文件
-├── o1.py                     # o1主程序文件
-├── ai_answer/                # AI回答相关文档
-├── build/                    # 构建输出目录
-├── history/                  # 历史对话记录
+├── ai_answer/               
+├── history/                  # 历史对话json记录
 ├── prompts/                  # Prompts 存储目录
 ├── prompts_manager/          # Prompt管理模块
+	├── prompts_manager.py   
+	├── system_prompt_manager.py  
 ├── README.md                 # 项目说明文件
 ```
 

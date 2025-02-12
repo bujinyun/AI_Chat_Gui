@@ -5,7 +5,6 @@ import time
 import threading
 import json
 import os
-import webbrowser
 from prompts_manager.prompts_manager import PromptsManager
 from prompts_manager.system_prompt_manager import SystemPromptManager
 
@@ -54,7 +53,7 @@ class DeepSeekChatApp:
         self.system_prompt = ""  # 默认系统提示词
 
         # 模型选择
-        self.models = ["gpt-4o-mini","gpt-4o","gpt-4-turbo","gpt-4","gpt-4-32k","o1","o1-mini"]  # 可用的模型列表
+        self.models = ["gpt-4o-mini","gpt-4o","gpt-4-turbo","gpt-4","gpt-4-32k","o1","o3-mini"]  # 可用的模型列表
         self.selected_model = tk.StringVar(value=self.models[0])  # 默认选择第一个模型
 
         # 创建控制面板
@@ -436,14 +435,45 @@ class DeepSeekChatApp:
             messagebox.showerror("错误", f"无法删除文件: {str(e)}")
 
     def show_loading(self, message="加载中..."):
-        """显示加载指示器"""
+        """显示加载指示器，并启动计时器"""
+        self.loading_start_time = time.time()  # 记录加载开始时间
         self.loading_label.config(text=message)
         self.root.update()
+        
+        # 启动计时器更新
+        self.update_timer()
+
+    def update_timer(self):
+        """更新加载计时器"""
+        if hasattr(self, 'loading_start_time'):
+            elapsed_time = time.time() - self.loading_start_time  # 计算已加载的时间
+            if elapsed_time > 300 and elapsed_time<301:   # 超过5分钟，显示超时弹窗
+                self.show_timeout_popup()
+            self.loading_label.config(text=f"已加载 {elapsed_time/60:.0f} 分{elapsed_time:.0f} 秒")  # 更新计时器显示
+            self.root.update()
+            
+            # 每隔 0.1 秒更新一次计时器
+            self.root.after(1000, self.update_timer)
+
 
     def hide_loading(self):
-        """隐藏加载指示器"""
+        """隐藏加载指示器并停止计时器"""
+        if hasattr(self, 'loading_start_time'):
+            del self.loading_start_time  # 删除计时器记录
         self.loading_label.config(text="")
         self.root.update()
+
+    def show_timeout_popup(self):
+        """显示超时弹窗"""
+        popup = tk.Toplevel(self.root)
+        popup.title("请求超时")
+        popup.geometry("400x200")
+
+        # 添加提示信息
+        message = "等待时间过长，请访问 官网确认 AI 服务是否可用。"
+        tk.Label(popup, text=message, wraplength=350, justify="left").pack(pady=20, padx=20)
+        # 添加关闭按钮
+        ttk.Button(popup, text="关闭", command=popup.destroy).pack(pady=10)
 
     def display_message(self, sender, message):
         """显示消息到聊天窗口"""
@@ -460,10 +490,10 @@ class DeepSeekChatApp:
         if sender == self.selected_model.get():
             self.show_popup(message)
     
-    def show_popup(self, message):
+    def show_popup(self, message,title="最新回复"):
         """显示最新回复的弹出窗口"""
         self.popup = tk.Toplevel(self.root)
-        self.popup.title("最新回复")
+        self.popup.title(title)
         self.popup.geometry("600x400")
         
         # 创建主容器
@@ -651,6 +681,9 @@ class DeepSeekChatApp:
             messagebox.showwarning("警告", "没有可撤回的消息")
             return
 
+        # 获取最后一条用户消息
+        last_user_message = self.conversation_history[-2]["content"]
+        
         # 移除最后两条消息（用户消息和AI回复）
         self.conversation_history = self.conversation_history[:-2]
         
@@ -663,8 +696,12 @@ class DeepSeekChatApp:
             if msg["role"] != "system":  # 不显示系统提示
                 self.display_message(msg["role"].capitalize(), msg["content"])
         
+        # 将最后一条用户消息放入输入框
+        self.user_input.delete("1.0", tk.END)
+        self.user_input.insert(tk.END, last_user_message)
+        
         self.chat_display.config(state='disabled')
-        self.display_message("系统", "已撤回最后一条对话")
+        self.display_message("系统", "已撤回最后一条对话，消息已放入输入框")
 
     def clear_history(self):
         """清空对话历史"""
@@ -722,7 +759,7 @@ class DeepSeekChatApp:
             "Content-Type": "application/json"
         }
         model = self.selected_model.get()
-        if model in ["o1", "o1-mini"]:
+        if model in ["o1", "o1-mini","o3","o3-mini"]:
             # Remove system messages for o1 and o1-mini models
             system_messages = [msg for msg in self.conversation_history if msg["role"] == "system"]
             if system_messages:
@@ -730,6 +767,7 @@ class DeepSeekChatApp:
             
             data = {
                 "model": model,
+                "reasoning_effort": "high",
                 "messages": self.conversation_history,
                 "max_completion_tokens": self.max_tokens
             }
@@ -743,10 +781,6 @@ class DeepSeekChatApp:
 
         # 重试机制
         max_retries = 3
-        retry_delay = 30  # 重试间隔时间（秒）
-
-        # 启动计时器
-        start_time = time.time()
 
         for attempt in range(max_retries):
             try:
@@ -763,26 +797,14 @@ class DeepSeekChatApp:
                 # 在主线程中显示AI回复
                 self.root.after(0, self.display_message, self.selected_model.get(), ai_response)
                 return
-            except requests.exceptions.Timeout:
-                # 检查是否超过 5 分钟
-                if time.time() - start_time > 300:  # 300 秒 = 5 分钟
-                    self.hide_loading()
-                    self.root.after(0, self.show_timeout_popup)  # 显示超时弹窗
-                    return
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                self.hide_loading()
-                self.root.after(0, self.display_message, "系统", "请求超时，请检查网络连接后重试")
-                return
             except requests.exceptions.RequestException as e:
                 # 如果API调用失败，移除最后一条用户消息
                 self.conversation_history.pop()
                 self.hide_loading()
-                
+
                 # 获取更多错误详情
                 error_details = str(e)
-                if hasattr(e, 'response'):
+                if hasattr(e, 'response') and e.response is not None:
                     try:
                         error_details = f"Status Code: {e.response.status_code}\n"
                         if e.response.status_code == 401:
@@ -792,10 +814,15 @@ class DeepSeekChatApp:
                         elif 500 <= e.response.status_code < 600:
                             error_details += "服务器错误：API服务端出现问题"
                         else:
-                            error_details += f"响应内容: {e.response.text[:200]}"
-                    except:
-                        error_details = str(e)
-                
+                            # 打印原始响应内容（截取前2000字符以避免过长）
+                            raw_response = e.response.text[:2000]
+                            error_details += f"响应内容: {raw_response}"
+                    except Exception as ex:
+                        error_details = f"解析响应失败: {str(ex)}"
+                else:
+                    # 如果没有 response，说明服务器响应为空
+                    error_details = f"服务器响应为空(请求未到达服务器或服务器出现异常): {str(e)}"
+
                 self.root.after(0, self.display_message, "系统", 
                     f"API请求失败\n"
                     f"错误类型: {type(e).__name__}\n"
@@ -803,13 +830,17 @@ class DeepSeekChatApp:
                     f"请检查网络连接和API配置后重试")
 
                 return
-            except (KeyError, ValueError) as e:
+            except (KeyError, ValueError, json.JSONDecodeError) as e:
                 self.conversation_history.pop()
                 self.hide_loading()
-                self.root.after(0, self.display_message, "系统", f"解析API响应失败: {str(e)}")
+                # 如果是 JSONDecodeError，打印原始响应内容
+                if isinstance(e, json.JSONDecodeError):
+                    raw_response = e.response.text[:2000] if hasattr(e, 'response') and e.response is not None else "无响应内容"
+                    error_details = f"解析JSON失败: {str(e)}\n原始响应内容: {raw_response}"
+                else:
+                    error_details = f"解析API响应失败: {str(e)}"
+                self.root.after(0, self.display_message, "系统", error_details)
                 return
-        self.hide_loading()
-        self.root.after(0, self.display_message, "系统", "请求失败，请稍后重试")
 
     def show_timeout_popup(self):
         """显示超时弹窗"""
@@ -928,7 +959,7 @@ if __name__ == "__main__":
         "API_URL": "youapiurl",
         "API_KEY": "youapi",
         "max_history_length": 100,
-        "max_tokens": 8000 
+        "max_tokens": 80000 
     }
 
     root = tk.Tk()

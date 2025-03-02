@@ -449,10 +449,12 @@ class DeepSeekChatApp:
             elapsed_time = time.time() - self.loading_start_time  # 计算已加载的时间
             if elapsed_time > 300 and elapsed_time<301:   # 超过5分钟，显示超时弹窗
                 self.show_timeout_popup()
-            self.loading_label.config(text=f"已加载 {elapsed_time/60:.0f} 分{elapsed_time:.0f} 秒")  # 更新计时器显示
+            minutes = int(elapsed_time // 60)
+            seconds = int(elapsed_time % 60)
+            self.loading_label.config(text=f"已加载 {minutes} 分 {seconds} 秒")  # 更新计时器显示
             self.root.update()
             
-            # 每隔 0.1 秒更新一次计时器
+            # 每隔 1 秒更新一次计时器
             self.root.after(1000, self.update_timer)
 
 
